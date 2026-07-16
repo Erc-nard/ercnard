@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Beads Curtain</title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+    <style>
+        body {
+            margin: 0; padding: 0; background: transparent; /* 💡 티스토리 임베드를 위해 외부 배경 제거 */
+            display: flex; justify-content: center; align-items: center;
+            height: 100vh; font-family: 'Malgun Gothic';  overflow: hidden;
+        }
+        #game-container {
+            position: relative; box-shadow: 0 15px 35px rgba(121, 85, 72, 0.2);
+            border-radius: 20px; overflow: hidden; 
+        }
+        #html-color-picker { position: absolute; visibility: hidden; left: 0; top: 0; }
+    </style>
+</head>
+<body>
+
+    <div id="game-container"></div>
+    <input type="color" id="html-color-picker" value="#ff4757">
+
+<script>
+
+// --- 1. 시작 화면 (메뉴 씬) ---
+class MenuScene extends Phaser.Scene {
+    constructor() { super('MenuScene'); }
+    preload() {
+        this.cameras.main.setBackgroundColor('#f7f1e3');
+        this.load.setCORS('anonymous');
+
+        // GitHub 원본 Raw 이미지 경로
+        this.load.image('shape_circle', 'https://raw.githubusercontent.com/Erc-nard/ercnard/main/bead/bead.png');
+        this.load.image('shape_flower', 'https://raw.githubusercontent.com/Erc-nard/ercnard/main/bead/tribead.png');
+        this.load.image('shape_star',   'https://raw.githubusercontent.com/Erc-nard/ercnard/main/bead/starbead.png');
+        this.load.image('tool_eraser',  'https://raw.githubusercontent.com/Erc-nard/ercnard/main/bead/eraser.png');
+        this.load.image('title', 'https://raw.githubusercontent.com/Erc-nard/ercnard/main/bead/title.png');
+        this.load.image('background', 'https://raw.githubusercontent.com/Erc-nard/ercnard/main/bead/background.png');
+    }
+    create() {
+        // 💡 시작 화면에 background 이미지 깔기
+        this.add.image(475, 325, 'background').setDisplaySize(950, 650);
+
+        // 카메라 아이콘 생성
+        let camGraphic = this.make.graphics({ x: 0, y: 0, add: false });
+        camGraphic.fillStyle(0x8d5b4c, 1); camGraphic.fillRoundedRect(10, 18, 44, 34, 6); camGraphic.fillRect(22, 10, 20, 8);
+        camGraphic.fillStyle(0x2d3436, 1); camGraphic.fillCircle(32, 35, 10);
+        camGraphic.fillStyle(0x8d5b4c, 1); camGraphic.fillCircle(32, 35, 5);
+        camGraphic.generateTexture('icon_camera', 64, 64);
+
+        this.add.image(470, 180, 'title').setScale(1.3);
+
+        const sizes = [10, 20, 30];
+        sizes.forEach((size, index) => {
+            let btnX = 475; let btnY = 320 + (index * 85);
+            let btnBg = this.add.rectangle(btnX, btnY, 280, 60, 0xb3fff7).setInteractive({ useHandCursor: true });
+            let btnText = this.add.text(btnX, btnY, `${size} x ${size}`, { fontSize: '24px', fill: '#8d5b4c', fontWeight: 'bold' }).setOrigin(0.5);
+
+            btnBg.on('pointerdown', () => { this.scene.start('GameScene', { gridSize: size }); });
+            btnBg.on('pointerover', () => { btnBg.setFillStyle(0x527075); btnText.setStyle({ fill: '#ffffff' }); btnBg.setScale(1.05); });
+            btnBg.on('pointerout', () => { btnBg.setFillStyle(0xb3fff7); btnText.setStyle({ fill: '#8d5b4c' }); btnBg.setScale(1.0); });
+        });
+    }
+}
+
+// --- 2. 메인 게임 화면 (게임 씬) ---
+class GameScene extends Phaser.Scene {
+    constructor() { super('GameScene'); }
+
+    init(data) {
+        this.gridSize = data.gridSize || 10;
+        this.selectedShape = 'shape_circle';
+        this.selectedColor = 'original'; 
+        this.isEraserActive = false;
+        this.beadsGrid = Array.from({ length: this.gridSize }, () => []);
+    }
+
+    create() {
+        // 💡 게임 화면에 background 이미지 깔기 (기존 단색 배경 대체)
+        this.add.image(475, 325, 'background').setDisplaySize(950, 650);
+
+        this.boardWidth = 480; this.boardHeight = 420;
+        this.boardX = 60; this.boardY = 80;
+
+        // 상단 걸이봉
+        this.add.rectangle(this.boardX + this.boardWidth/2, this.boardY - 15, this.boardWidth + 30, 20, 0x8d5b4c).setStrokeStyle(2, 0x4d281e);
+        
+        this.colWidth = this.boardWidth / this.gridSize;
+        this.rowHeight = this.boardHeight / this.gridSize;
+
+        // 가이드 줄
+        for (let i = 0; i < this.gridSize; i++) {
+            let lineX = this.boardX + (i * this.colWidth) + (this.colWidth / 2);
+            this.add.line(0, 0, lineX, this.boardY, lineX, this.boardY + this.boardHeight, 0xb2bec3).setOrigin(0).setAlpha(0.5);
+        }
+
+        let clickZone = this.add.zone(this.boardX, this.boardY, this.boardWidth, this.boardHeight).setOrigin(0).setInteractive();
+        clickZone.on('pointerdown', (pointer) => {
+            let relativeX = pointer.x - this.boardX;
+            let colIndex = Math.floor(relativeX / this.colWidth);
+            if (colIndex >= 0 && colIndex < this.gridSize) { this.handleColumnClick(colIndex); }
+        });
+
+         this.add.rectangle(850, 46, 120, 40, 0xb3fff7).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.scene.start('MenuScene'));
+        this.add.text(800, 40, 'go to main', { fontSize: '16px', fill: '#8d5b4c', fontWeight: 'bold' }).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.scene.start('MenuScene'));
+       
+
+        // 상단 Photo 버튼
+        let completeBtn = this.add.container(780, 40);
+        let btnBg = this.add.rectangle(30, 400, 160, 50, 0xb3fff7, 1).setInteractive({ useHandCursor: true });
+        let btnIcon = this.add.image(-10, 400, 'icon_camera').setScale(0.5);
+        let btnText = this.add.text(10, 394, 'Photo', { fontSize: '18px', fill: '#8d5b4c', fontWeight: 'bold' });
+        completeBtn.add([btnBg, btnIcon, btnText]);
+        btnBg.on('pointerdown', () => this.showCompletePopup());
+
+        this.createBottomUI();
+        this.createRightUI();
+    }
+
+    handleColumnClick(col) {
+        let currentColumn = this.beGridData(col);
+
+        if (this.isEraserActive) {
+            if (currentColumn.length > 0) { currentColumn.pop().destroy(); }
+        } else {
+            if (currentColumn.length < this.gridSize) {
+                let rowIndex = currentColumn.length;
+                let beadX = this.boardX + (col * this.colWidth) + (this.colWidth / 2);
+                let beadY = this.boardY + (rowIndex * this.rowHeight) + (this.rowHeight / 2);
+                
+                let bead = this.add.image(beadX, beadY, this.selectedShape);
+
+                let scaleFactor = Math.min(this.colWidth / bead.width, this.rowHeight / bead.height) * 0.8;
+                bead.setScale(scaleFactor);
+                
+                if (this.selectedColor === 'original') {
+                    bead.clearTint();
+                } else {
+                    bead.setTint(this.selectedColor);
+                }
+                
+                bead.beadColor = this.selectedColor;
+                bead.beadShape = this.selectedShape;
+                currentColumn.push(bead);
+            }
+        }
+    }
+
+    beGridData(col) {
+        if (!this.beadsGrid[col]) { this.beadsGrid[col] = []; }
+        return this.beadsGrid[col];
+    }
+
+    createBottomUI() {
+        this.add.text(60, 520, 'Select the Beads', { fontSize: '18px', fill: '#4d281e', fontWeight: 'bold' });
+        const shapes = [
+            { id: 'shape_circle', label: '동그라미' },
+            { id: 'shape_flower', label: '꽃모양' },
+            { id: 'shape_star', label: '별모양' }
+        ];
+        this.shapeButtons = [];
+
+        shapes.forEach((shape, index) => {
+            let x = 100 + (index * 100); let y = 580;
+            let bg = this.add.circle(x, y, 32, 0xffffff).setStrokeStyle(3, 0xdcdde1).setInteractive({ useHandCursor: true });
+            let img = this.add.image(x, y, shape.id);
+            img.setScale(Math.min(50/img.width, 50/img.height));
+
+            bg.on('pointerdown', () => {
+                this.isEraserActive = false; this.selectedShape = shape.id; this.updateUIHighlight();
+            });
+            this.shapeButtons.push({ id: shape.id, bg: bg });
+        });
+
+        let eraserX = 500; let eraserY = 580;
+        this.eraserBg = this.add.circle(eraserX, eraserY, 22, 0xffffff).setStrokeStyle(3, 0xdcdde1).setInteractive({ useHandCursor: true });
+        this.add.image(eraserX, eraserY, 'tool_eraser').setScale(0.1);
+        this.eraserBg.on('pointerdown', () => { this.isEraserActive = true; this.updateUIHighlight(); });
+
+        this.updateUIHighlight();
+    }
+
+    createRightUI() {
+        let panelX = 720;
+        this.add.text(panelX, 125, 'Current color', { fontSize: '16px', fill: '#4d281e', fontWeight: 'bold' });
+        this.colorDisplay = this.add.circle(panelX +20, 170, 18, 0xffffff).setStrokeStyle(3, 0xdcdde1);
+
+        const presetColors = [
+            0xff7b7b, 0xff947b, 0xffbb72, 0xffea72,
+            0xc0ff72, 0x72ff9f, 0x72fff3, 0x54a0ff,
+            0xda91ff, 0xffaeda, 0xffffff, 0x2f3542
+        ];
+        let cols = 4; let spacing = 45;
+        let gridStartX = panelX + 20; let gridStartY = 225;
+
+        presetColors.forEach((color, index) => {
+            let col = index % cols; let row = Math.floor(index / cols);
+            let xx = gridStartX + (col * spacing); let yy = gridStartY + (row * spacing);
+            let colorCircle = this.add.circle(xx, yy, 16, color).setStrokeStyle(2, 0xdcdde1).setInteractive({ useHandCursor: true });
+            
+            colorCircle.on('pointerdown', () => {
+                this.selectedColor = color;
+                this.colorDisplay.setFillStyle(this.selectedColor);
+                this.isEraserActive = false;
+                this.updateUIHighlight();
+            });
+
+            // 💡 마우스 Hover 시 부드럽게 커지고 작아지는 애니메이션 추가
+            colorCircle.on('pointerover', () => {
+                this.tweens.add({
+                    targets: colorCircle,
+                    scale: 1.3,
+                    duration: 80,
+                    ease: 'Quad.out'
+                });
+            });
+
+            colorCircle.on('pointerout', () => {
+                this.tweens.add({
+                    targets: colorCircle,
+                    scale: 1.0,
+                    duration: 80,
+                    ease: 'Quad.out'
+                });
+            });
+        });
+
+        let customBtnY = 170;
+        let customBtn = this.add.rectangle(panelX + 80, customBtnY, 40, 40, 0x8d5b4c, 1).setOrigin(0.5).setInteractive({ useHandCursor: true });
+        this.add.text(panelX + 80, customBtnY, '🎨', { fontSize: '14px', fill: '#ffffff', fontWeight: 'bold' }).setOrigin(0.5);
+
+        const htmlPicker = document.getElementById('html-color-picker');
+        customBtn.on('pointerdown', () => htmlPicker.click());
+        htmlPicker.addEventListener('input', (event) => {
+            this.selectedColor = Phaser.Display.Color.HexStringToColor(event.target.value).color;
+            this.colorDisplay.setFillStyle(this.selectedColor);
+            this.isEraserActive = false;
+            this.updateUIHighlight();
+        });
+    }
+
+    updateUIHighlight() {
+        this.shapeButtons.forEach(btn => {
+            btn.bg.setStrokeStyle(3, (!this.isEraserActive && this.selectedShape === btn.id) ? 0x75ffa7 : 0xdcdde1);
+        });
+        this.eraserBg.setStrokeStyle(3, this.isEraserActive ? 0x75ffa7 : 0xdcdde1);
+    }
+
+    showCompletePopup() {
+        this.cameras.main.flash(300, 255, 255, 255);
+        this.popupContainer = this.add.container(0, 0).setDepth(100);
+
+        let bgMask = this.add.rectangle(475, 325, 950, 650, 0x000000, 0.75).setInteractive();
+        let card = this.add.rectangle(475, 305, 500, 520, 0xffffff).setStrokeStyle(8, 0xacf9e0);
+        let woodBar = this.add.rectangle(475, 85, 420, 16, 0x8d5b4c);
+        let heartHook = this.add.text(475, 55, '❤️', { fontSize: '24px' }).setOrigin(0.5);
+        this.popupContainer.add([bgMask, card, woodBar, heartHook]);
+
+        let pWidth = 380; let pHeight = 360;
+        let pX = 475 - pWidth/2; let pY = 105;
+        let pColWidth = pWidth / this.gridSize;
+        let pRowHeight = pHeight / this.gridSize;
+
+        for (let i = 0; i < this.gridSize; i++) {
+            let lx = pX + (i * pColWidth) + (pColWidth/2);
+            this.popupContainer.add(this.add.line(0, 0, lx, pY, lx, pY + pHeight, 0xdcdde1).setOrigin(0));
+        }
+
+        for (let col = 0; col < this.gridSize; col++) {
+            this.beGridData(col).forEach((beadData, row) => {
+                let bx = pX + (col * pColWidth) + (pColWidth / 2);
+                let by = pY + (row * pRowHeight) + (pRowHeight / 2);
+                let pBead = this.add.image(bx, by, beadData.beadShape);
+                
+                let pScaleFactor = Math.min(pColWidth / pBead.width, pRowHeight / pBead.height) * 0.8;
+                pBead.setScale(pScaleFactor); 
+                
+                if (beadData.beadColor === 'original') { pBead.clearTint(); } 
+                else { pBead.setTint(beadData.beadColor); }
+
+                this.popupContainer.add(pBead);
+            });
+        }
+
+        let closeBtn = this.add.rectangle(475, 595, 180, 44, 0x2f3542).setStrokeStyle(2, 0xffffff).setOrigin(0.5).setInteractive({ useHandCursor: true });
+        let closeText = this.add.text(475, 595, 'X Close', { fontSize: '16px', fill: '#ffffff', fontWeight: 'bold' }).setOrigin(0.5);
+        this.popupContainer.add([closeBtn, closeText]);
+
+        closeBtn.on('pointerdown', () => this.popupContainer.destroy());
+        closeBtn.on('pointerover', () => closeBtn.setFillStyle(0x747d8c));
+        closeBtn.on('pointerout', () => closeBtn.setFillStyle(0x2f3542));
+    }
+}
+
+// --- 3. Phaser 제어 설정 ---
+const config = {
+    type: Phaser.AUTO,
+    width: 950, height: 650,
+    parent: 'game-container',
+    backgroundColor: '#f7f1e3', 
+    antialias: true,
+    scene: [MenuScene, GameScene]
+};
+
+const game = new Phaser.Game(config);
+</script>
+
+</body>
+</html>
