@@ -1,0 +1,61 @@
+<style>
+  /* 전체 위젯 컨테이너 (170x108) */
+  .widget-box {
+    width: 170px;
+    height: 108px;
+    position: relative;
+   background-image: url('https://raw.githubusercontent.com/Erc-nard/ercnard/main/clicker/Frame%201.png');
+    background-size: cover; /* 이미지가 170x108 꽉 차게 비율 자동 조절 */
+    background-position: center; /* 이미지의 중앙을 기준으로 정렬 */
+    background-repeat: no-repeat; 
+    overflow: hidden;
+  }
+  
+
+ /* 2. 버튼들을 위젯 중앙에 배치하기 위한 영역 */
+  .btn-wrap {
+    position: absolute;
+    /* 108px 높이에서 70px 버튼을 세로 중앙 정렬 */
+    top: 47%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    gap: 6px; /* 두 버튼 사이의 간격 */
+  }
+
+  /* 3. 버튼 공통 스타일 (70x70) */
+  .click-btn {
+    display: block;
+    width: 70px;
+    height: 70px;
+    background-size: cover;
+    background-position: center;
+    border-radius: 12px; /* 둥근 모서리 살짝 추가 */
+    cursor: pointer;
+    
+    /* 애니메이션 설정 */
+    transition: transform 0.08s ease-out;
+    transform-origin: bottom; /* 아래를 축으로 찌그러짐 */
+    
+    /* 🔴 이미지 없을 때 확인용 임시 버튼 색상 (이미지 넣으면 사라짐) */
+    background-color: #bbb; 
+  }
+
+  /* 4. 마우스로 클릭하고 있을 때(눌림) 효과 */
+  .click-btn:active {
+    /* 아래로 6px 내려가면서 세로로 납작해짐 */
+    transform: scaleY(0.85) translateY(6px);
+  }
+</style>
+
+<div class="widget-box">
+  <div class="clicker-base"></div>
+  
+  <div class="btn-wrap">
+    <a href="javascript:void(0);" class="click-btn btn-left" style="background-image: url('https://raw.githubusercontent.com/Erc-nard/ercnard/main/clicker/Group%201.png');"></a>
+    <a href="javascript:void(0);" class="click-btn btn-right" style="background-image: url('https://raw.githubusercontent.com/Erc-nard/ercnard/main/clicker/Group%202.png');"></a>
+  </div>
+</div>
